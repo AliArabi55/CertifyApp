@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Certify — Certificates &amp; Mail Merge</title>
+<link rel="stylesheet" href="/static/css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>🎓 Certify</h1>
+  <p>Design certificates, bulk-generate them, and send personalized emails from your own Gmail.</p>
+</header>
+
+<nav class="steps">
+  <button data-step="1">1. Design</button>
+  <button data-step="2">2. Recipients</button>
+  <button data-step="3">3. Email</button>
+  <button data-step="4">4. Send</button>
+</nav>
+
+<main>
+
+  <!-- Step 0: choose what you want to do -->
+  <section id="step-0" class="step active">
+    <h2>What would you like to do?</h2>
+    <input id="projectNameInput" type="text" placeholder="Project name (e.g. Spring 2026 Outreach)" />
+    <div class="mode-cards">
+      <button class="mode-card" data-mode="certificates">
+        <span class="mode-emoji">🎓</span>
+        <strong>Design &amp; send certificates</strong>
+        <p>Create a certificate template, bulk-generate PDFs, and email them out.</p>
+      </button>
+      <button class="mode-card" data-mode="emails_only">
+        <span class="mode-emoji">📧</span>
+        <strong>Send emails only</strong>
+        <p>Skip certificates — just send personalized emails to a list of recipients.</p>
+      </button>
+    </div>
+    <p id="projectStatus" class="status"></p>
+  </section>
+
+  <!-- Step 1: Certificate designer -->
+  <section id="step-1" class="step">
+    <h2>1. Design your certificate</h2>
+
+    <div id="bgUploadRow" class="row">
+      <input id="bgFileInput" type="file" accept="image/*" />
+      <button id="uploadBgBtn">Upload certificate background</button>
+    </div>
+
+    <div id="designerRow" style="display:none" class="designer">
+      <div class="canvas-wrap">
+        <canvas id="designerCanvas"></canvas>
+        <div class="toolbar">
+          <button id="addFieldBtn">+ Add variable field</button>
+          <input id="fontFileInput" type="file" accept=".ttf" />
+          <button id="uploadFontBtn">Upload custom font</button>
+          <button id="saveFieldsBtn" class="primary">Save fields</button>
+        </div>
+      </div>
+
+      <div id="fieldProps" class="props-panel" style="display:none">
+        <h3>Field: <span id="fieldNameLabel"></span></h3>
+        <label>Font size <input id="fontSizeInput" type="number" min="6" max="300" /></label>
+        <label>Color <input id="fontColorInput" type="color" /></label>
+        <label>Bold <input id="boldInput" type="checkbox" /></label>
+        <label>Italic <input id="italicInput" type="checkbox" /></label>
+        <label>Font
+          <select id="fontFamilySelect">
+            <option value="arial.ttf">Arial</option>
+            <option value="arialbd.ttf">Arial Bold</option>
+            <option value="times.ttf">Times New Roman</option>
+            <option value="timesbd.ttf">Times New Roman Bold</option>
+            <option value="calibri.ttf">Calibri</option>
+            <option value="calibrib.ttf">Calibri Bold</option>
+          </select>
+        </label>
+        <button id="deleteFieldBtn" class="danger">Delete field</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 2: Recipients data + bulk generation -->
+  <section id="step-2" class="step">
+    <h2>2. Recipients</h2>
+    <p>Download the template, fill in one row per recipient, then upload it to load them.</p>
+    <div class="row">
+      <button id="downloadTemplateBtn">Download Excel template</button>
+      <input id="excelFileInput" type="file" accept=".xlsx" />
+      <button id="generateBtn" class="primary">Generate certificates</button>
+    </div>
+    <p id="generatedCount" class="status"></p>
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Email</th><th>Certificate</th></tr></thead>
+      <tbody id="generatedTableBody"></tbody>
+    </table>
+  </section>
+
+  <!-- Step 3: Email draft -->
+  <section id="step-3" class="step">
+    <h2>3. Write the email</h2>
+    <p>Use <code>{{Variable}}</code> placeholders (e.g. <code>{{Name}}</code>, <code>{{Role}}</code>) — same variables as your Excel columns.</p>
+
+    <div class="ai-prompt-box">
+      <h3>✨ Need help writing it? Build a prompt for ChatGPT / Gemini</h3>
+      <textarea id="emailContextInput" rows="2" placeholder="Briefly describe this email, e.g. 'certificate of achievement for volunteers this semester'"></textarea>
+      <div class="row">
+        <label><input id="optBold" type="checkbox" checked /> Bold text &amp; rich formatting</label>
+        <label><input id="optImage" type="checkbox" /> Leave a spot for an image</label>
+        <label><input id="optLinkedIn" type="checkbox" /> LinkedIn share button</label>
+        <label><input id="optCertNote" type="checkbox" /> Mention attached certificate</label>
+      </div>
+      <div class="row">
+        <button id="generatePromptBtn">Generate prompt</button>
+        <button id="copyPromptBtn" style="display:none">Copy prompt</button>
+      </div>
+      <textarea id="aiPromptOutput" rows="6" readonly style="display:none"></textarea>
+      <p class="status">Paste the prompt into ChatGPT/Gemini, then paste the HTML it gives you into the box below.</p>
+    </div>
+
+    <input id="subjectInput" type="text" placeholder="Subject, e.g. 🎉 Congratulations {{Name}}!" />
+    <div class="row">
+      <input id="emailImageInput" type="file" accept="image/*" />
+      <button id="uploadEmailImageBtn">Upload &amp; insert image</button>
+      <button id="insertLinkedInBtn">Insert LinkedIn share button</button>
+    </div>
+    <textarea id="htmlTextarea" rows="12" placeholder="Write your HTML email body here..."></textarea>
+    <div class="row">
+      <button id="saveDraftBtn" class="primary">Save draft</button>
+    </div>
+    <p id="detectedVariables" class="status"></p>
+
+    <div class="row">
+      <select id="previewRowSelect"></select>
+      <button id="previewEmailBtn">Preview for this recipient</button>
+    </div>
+    <p><strong id="previewSubject"></strong></p>
+    <iframe id="previewFrame" class="preview-frame"></iframe>
+  </section>
+
+  <!-- Step 4: Connect Gmail + send -->
+  <section id="step-4" class="step">
+    <h2>4. Connect Gmail &amp; send</h2>
+    <p>Sends via your own Gmail using an <strong>App Password</strong> — no Google Cloud project needed. See the README for a 3-step guide to generate one.</p>
+    <div class="row">
+      <input id="gmailAddressInput" type="email" placeholder="you@gmail.com" />
+      <input id="gmailAppPasswordInput" type="password" placeholder="16-character App Password" />
+      <button id="connectGmailBtn" class="primary">Connect Gmail</button>
+      <button id="disconnectGmailBtn" class="danger">Forget credentials</button>
+    </div>
+    <p id="gmailStatus" class="status">Not connected</p>
+
+    <h3>Test send</h3>
+    <div class="row">
+      <select id="testRowSelect"></select>
+      <input id="testToInput" type="email" placeholder="your-test-address@gmail.com" />
+      <button id="sendTestBtn">Send test</button>
+    </div>
+
+    <h3>Send to everyone</h3>
+    <div class="row">
+      <button id="sendAllBtn" class="danger">Send to all recipients</button>
+      <span id="sendAllStatus" class="status"></span>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>Email</th><th>Status</th></tr></thead>
+      <tbody id="sendResultsBody"></tbody>
+    </table>
+  </section>
+
+</main>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

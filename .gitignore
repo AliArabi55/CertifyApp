@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Gmail App Password - never commit this
+config/.env
+
+# Runtime project data (uploaded backgrounds, generated certs, per-project data)
+backend/projects/*/
+!backend/projects/.gitkeep
