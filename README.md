@@ -1,25 +1,25 @@
 # Certify
 
-تصميم شهادات وإرسال رسائل مخصصة من مكان واحد.
+Design certificates and send personalized emails in one place.
 
-تطبيق محلي للأندية والفرق ومنظمي الفعاليات: صمّم شهادتك، ارفع بيانات المشاركين من Excel، ثم أرسل لكل شخص رسالته وشهادته عبر Gmail. ويمكنك إرسال الرسائل فقط دون شهادات.
+A local web app for clubs, teams, and event organizers. Design a certificate, upload your participants from Excel, and send each person a personalized email with their certificate through Gmail. You can also send emails without certificates.
 
-![الصفحة الرئيسية واختيار نوع المشروع](docs/images/home.png)
+![Home screen and project modes](docs/images/home.png)
 
-## المميزات
+## At a Glance
 
-| الميزة | ماذا تقدم لك؟ |
+| Feature | What you can do |
 | --- | --- |
-| مصمم الشهادات | خلفية من اختيارك، حقول قابلة للسحب، وتخصيص الخط والحجم واللون. |
-| توليد جماعي | شهادة PDF منفصلة لكل مشارك من ملف Excel. |
-| رسائل شخصية | استخدام متغيرات مثل `{{Name}}` مع معاينة الرسالة لكل مستلم. |
-| محتوى غني | صور داخل الرسالة وزر مشاركة LinkedIn ومساعد لبناء طلب كتابة لـ ChatGPT أو Gemini. |
-| إرسال عبر Gmail | ربط حسابك بكلمة مرور تطبيق، دون إعداد Google Cloud أو OAuth. |
-| تجربة قبل الإرسال | إرسال اختباري أولًا، وسجل يتجاوز المستلمين المسجلين كمرسَل إليهم عند إعادة الإرسال. |
+| Certificate designer | Upload your background, drag text fields into place, and customize fonts, sizes, and colors. |
+| Bulk generation | Create a separate PDF certificate for each participant in your Excel sheet. |
+| Personalized emails | Use placeholders such as `{{Name}}` and preview the message for each recipient. |
+| Rich content | Add inline images, a LinkedIn share button, or build a writing prompt for ChatGPT or Gemini. |
+| Gmail sending | Connect your account with an App Password, without Google Cloud or OAuth setup. |
+| Test before sending | Send a test first; the send log skips recipients already marked as sent when you retry. |
 
-## التشغيل السريع
+## Quick Start
 
-تحتاج إلى **Python 3.10 أو أحدث**. افتح PowerShell داخل مجلد المشروع وشغّل الأوامر التالية؛ إعداد البيئة وتثبيت المتطلبات مطلوبان في المرة الأولى فقط:
+You need **Python 3.10 or later**. Open PowerShell in the project folder and run these commands. Creating the environment and installing dependencies are only needed the first time:
 
 ```powershell
 python -m venv venv
@@ -27,29 +27,29 @@ python -m venv venv
 .\venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8080
 ```
 
-افتح **[http://localhost:8080](http://localhost:8080)**. اترك نافذة التشغيل مفتوحة، واستخدم `Ctrl+C` لإيقاف الخادم.
+Open **[http://localhost:8080](http://localhost:8080)**. Keep the terminal open while using the app. Press `Ctrl+C` to stop the server.
 
-في VS Code يمكنك أيضًا اختيار **Terminal > Run Task > Run Certify (8080)** بعد تثبيت المتطلبات. إذا كان المنفذ مشغولًا، أوقف نسخة التطبيق السابقة أو غيّر `8080` في الأمر إلى منفذ متاح وافتح العنوان الجديد.
+In VS Code, you can also choose **Terminal > Run Task > Run Certify (8080)** after installing dependencies. If the port is busy, stop your previous app instance or replace `8080` in the command with an available port and open the matching URL.
 
-## الاستخدام في 5 خطوات
+## Use It in 5 Steps
 
-1. **أنشئ مشروعًا:** اكتب اسمه واختر الشهادات والرسائل، أو الرسائل فقط.
-2. **صمّم الشهادة:** ارفع صورة الخلفية، أضف حقولًا مثل `Name`، ثم اضغط **Save fields**. تجاوز هذه الخطوة في وضع الرسائل فقط.
-3. **جهّز الرسالة والبيانات:** اكتب عنوان الرسالة ومحتوى HTML ومتغيراته في **Email** واحفظ المسودة. ارجع إلى **Recipients** لتنزيل قالب Excel، واملأ صفًا لكل شخص مع عمود `Email`، ثم ارفعه لتوليد الشهادات أو تحميل المستلمين. تحديد المتغيرات قبل تنزيل القالب يضمن ظهور أعمدتها.
-4. **راجع المعاينة:** افتح **Email** واختر مستلمًا ثم **Preview for this recipient** للتأكد من استبدال المتغيرات.
-5. **اختبر ثم أرسل:** اربط Gmail في **Send**، أرسل رسالة اختبار لنفسك، وراجعها قبل **Send to all recipients**.
+1. **Create a project:** Enter a name and choose **Design & send certificates** or **Send emails only**.
+2. **Design your certificate:** Upload a background, add fields such as `Name`, and click **Save fields**. Skip this step in emails-only mode.
+3. **Prepare your message and data:** In **Email**, write your subject and HTML body with placeholders, then save the draft. Return to **Recipients**, download the Excel template, fill in one row per person including `Email`, and upload it to generate certificates or load recipients. Defining placeholders before downloading the template ensures their columns are included.
+4. **Check the preview:** Open **Email**, choose a recipient, and click **Preview for this recipient** to check the personalized content.
+5. **Test and send:** Connect Gmail in **Send**, send a test to yourself, and review it before clicking **Send to all recipients**.
 
-![محرر الرسائل ومساعد كتابة الطلبات](docs/images/email.png)
+![Email editor and writing prompt helper](docs/images/email.png)
 
-## ربط Gmail وحماية بياناتك
+## Gmail and Privacy
 
-- فعّل [التحقق بخطوتين](https://myaccount.google.com/security)، ثم أنشئ [كلمة مرور تطبيق](https://myaccount.google.com/apppasswords) والصقها داخل التطبيق مع عنوان Gmail. لا تستخدم كلمة مرور حسابك العادية. قد تمنع سياسات بعض الحسابات إنشاء كلمات مرور التطبيقات.
-- تُحفظ بيانات المشاريع والشهادات محليًا داخل `backend/projects/`. وتُحفظ بيانات Gmail بنص صريح في `config/.env`؛ لا تشارك هذا الملف أو تضفه إلى Git. استخدم **Forget credentials** لحذفها محليًا.
-- يتصل التطبيق بخدمات خارجية لإرسال البريد وتحميل مكتبة الواجهة. وإذا استخدمت مساعد ChatGPT أو Gemini، فلا تنسخ إليه بيانات المستلمين أو كلمات المرور.
-- تخضع الرسائل لحدود Gmail وسياسات الحساب. زر LinkedIn لا يرفع الشهادة تلقائيًا؛ يرفقها المستلم بنفسه.
+- Enable [2-Step Verification](https://myaccount.google.com/security), then create an [App Password](https://myaccount.google.com/apppasswords) and enter it in the app with your Gmail address. Do not use your regular account password. Some account policies may prevent creating App Passwords.
+- Project data and certificates are stored locally in `backend/projects/`. Gmail credentials are saved in plain text in `config/.env`; never share or commit this file. Use **Forget credentials** to remove them locally.
+- The app connects to external services to send email and load a frontend library. If you use ChatGPT or Gemini, do not paste recipient data or passwords into your prompts.
+- Sending is subject to Gmail limits and account policies. The LinkedIn button does not upload a certificate automatically; recipients attach it themselves.
 
 <details>
-<summary>English documentation and additional details</summary>
+<summary>Detailed reference and additional features</summary>
 
 ## Certificate & Mail-Merge Web App
 
