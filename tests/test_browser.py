@@ -86,7 +86,7 @@ class BrowserFlowTests(unittest.TestCase):
 
     def handle_dialog(self, dialog):
         self.dialogs.append(dialog.message)
-        dialog.accept()
+        dialog.accept("Name") if dialog.type == "prompt" else dialog.accept()
 
     def test_compose_preview_uses_current_content_and_safe_recipient_text(self):
         self.assertEqual(self.page.locator("#generatedTableBody img").count(), 0)
@@ -138,6 +138,51 @@ class BrowserFlowTests(unittest.TestCase):
         self.page.locator("#emailEditor .ql-editor").fill("A readable message on mobile")
         self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"))
         self.page.screenshot(path=str(self.root / "mobile-composer.png"), full_page=True)
+        self.assertEqual(self.errors, [])
+
+    def test_failed_import_shows_error_and_keeps_current_recipients(self):
+        self.page.locator('[data-step="2"]').click()
+        self.page.locator("#excelFileInput").set_input_files({"name": "bad.xlsx", "mimeType": "application/octet-stream", "buffer": b"invalid"})
+        self.page.locator("#generateBtn").click()
+        expect(self.page.locator("#appStatus")).to_contain_text("valid .xlsx")
+        expect(self.page.locator("#generateBtn")).to_be_enabled()
+        expect(self.page.locator("#generatedTableBody tr")).to_have_count(1)
+        self.assertEqual(self.errors, [])
+
+    def test_toolbar_formats_are_exported_as_email_html(self):
+        editor = self.page.locator("#emailEditor .ql-editor")
+        editor.fill("Styled message")
+        editor.press("Control+a")
+        for control in [".ql-bold", ".ql-italic", ".ql-underline"]:
+            self.page.locator(control).click()
+        for picker, value in [("size", "18px"), ("font", "serif"), ("color", "#e60000"), ("align", "right")]:
+            self.page.locator(f".ql-{picker} .ql-picker-label").click()
+            self.page.locator(f'.ql-{picker} .ql-picker-item[data-value="{value}"]').click()
+        self.page.locator(".ql-direction").click()
+        self.page.locator(".ql-link").click()
+        self.page.locator('.ql-tooltip input[data-link]').fill("https://example.com/")
+        self.page.locator('.ql-tooltip input[data-link]').press("Enter")
+        source = self.page.evaluate("getDraftHtml()")
+        for expected in ["<strong", "<em", "<u", "18px", "serif", "color:", "text-align: right", "direction: rtl", "https://example.com/"]:
+            self.assertIn(expected, source)
+        self.assertEqual(self.errors, [])
+
+    def test_certificate_font_selection_and_scaling_are_saved(self):
+        self.page.goto(self.url)
+        self.page.locator("#projectNameInput").fill("Certificate test")
+        self.page.locator('[data-mode="certificates"]').click()
+        output = io.BytesIO()
+        Image.new("RGB", (600, 400), "white").save(output, format="PNG")
+        self.page.locator("#bgFileInput").set_input_files({"name": "background.png", "mimeType": "image/png", "buffer": output.getvalue()})
+        self.page.locator("#uploadBgBtn").click()
+        self.page.wait_for_function("state.canvas && state.canvas.backgroundImage")
+        self.page.locator("#addFieldBtn").click()
+        self.page.locator("#fontFamilySelect").select_option("times.ttf")
+        self.assertEqual(self.page.evaluate("state.canvas.getActiveObject().fontFamily"), "Times New Roman")
+        self.page.evaluate("state.canvas.getActiveObject().scale(1.5)")
+        self.page.locator("#saveFieldsBtn").click()
+        self.page.wait_for_function("state.fields.length === 1")
+        self.assertEqual(self.page.evaluate("state.fields[0].font_size"), 42)
         self.assertEqual(self.errors, [])
 
 

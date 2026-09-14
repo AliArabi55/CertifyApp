@@ -186,6 +186,15 @@ function applyMode(mode) {
 }
 
 // ---------- Step 1: Designer ----------
+const certificateFonts = {
+  "arial.ttf": { family: "Arial" },
+  "arialbd.ttf": { family: "Arial", bold: true },
+  "times.ttf": { family: "Times New Roman" },
+  "timesbd.ttf": { family: "Times New Roman", bold: true },
+  "calibri.ttf": { family: "Calibri" },
+  "calibrib.ttf": { family: "Calibri", bold: true },
+};
+
 onAction("uploadBgBtn", async () => {
   if (!state.projectId) return alert("Create a project first");
   const file = $("bgFileInput").files[0];
@@ -232,18 +241,23 @@ function updatePropsPanel() {
   if (!obj) return;
   $("fieldProps").style.display = "block";
   $("fieldNameLabel").textContent = obj.data?.name || "";
-  $("fontSizeInput").value = Math.round(obj.fontSize);
+  $("fontSizeInput").value = Math.round(obj.fontSize * obj.scaleY);
   $("fontColorInput").value = obj.fill;
   $("boldInput").checked = !!obj.data?.bold;
   $("italicInput").checked = !!obj.data?.italic;
   $("fontFamilySelect").value = obj.data?.font || "arial.ttf";
+  const custom = certificateFonts[$("fontFamilySelect").value]?.custom || false;
+  $("boldInput").disabled = custom;
+  $("italicInput").disabled = custom;
 }
 
 $("addFieldBtn").addEventListener("click", () => {
   if (!state.canvas) return alert("Upload a background image first");
-  const name = prompt("Variable name (e.g. Name, Role, Date):");
+  const name = prompt("Variable name (e.g. Name, Role, Date):")?.trim();
   if (!name) return;
-  const text = new fabric.Textbox(name, {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_]*$/.test(name)) return alert("Use only letters, numbers and underscores");
+  if (state.canvas.getObjects().some((obj) => obj.data?.name === name)) return alert("This field already exists");
+  const text = new fabric.Text(name, {
     left: state.canvas.getWidth() / 2,
     top: state.canvas.getHeight() / 2,
     fontSize: 28,
@@ -252,7 +266,10 @@ $("addFieldBtn").addEventListener("click", () => {
     originX: "center",
     originY: "center",
     textAlign: "center",
+    lockRotation: true,
+    lockScalingFlip: true,
   });
+  text.setControlsVisibility({ ml: false, mr: false, mt: false, mb: false, mtr: false });
   text.data = { name, font: "arial.ttf", bold: false, italic: false };
   state.canvas.add(text);
   state.canvas.setActiveObject(text);
@@ -263,10 +280,19 @@ $("addFieldBtn").addEventListener("click", () => {
   $(id).addEventListener("input", () => {
     const obj = state.canvas?.getActiveObject();
     if (!obj) return;
+    const font = certificateFonts[$("fontFamilySelect").value] || { family: "Arial" };
+    $("boldInput").disabled = !!font.custom;
+    $("italicInput").disabled = !!font.custom;
+    if (font.custom) {
+      $("boldInput").checked = false;
+      $("italicInput").checked = false;
+    }
+    if (id === "fontSizeInput") obj.set({ scaleX: 1, scaleY: 1 });
     obj.set({
-      fontSize: parseInt($("fontSizeInput").value, 10) || obj.fontSize,
+      fontSize: id === "fontSizeInput" ? Math.max(6, Math.min(300, parseInt($("fontSizeInput").value, 10) || obj.fontSize)) : obj.fontSize,
       fill: $("fontColorInput").value,
-      fontWeight: $("boldInput").checked ? "bold" : "normal",
+      fontFamily: font.family,
+      fontWeight: $("boldInput").checked || font.bold ? "bold" : "normal",
       fontStyle: $("italicInput").checked ? "italic" : "normal",
     });
     obj.data.bold = $("boldInput").checked;
@@ -289,6 +315,10 @@ onAction("uploadFontBtn", async () => {
   form.append("file", file);
   const res = await apiFetch(`${API}/projects/${state.projectId}/fonts`, { method: "POST", body: form });
   const data = await res.json();
+  const family = `Custom_${data.filename.replace(/\W/g, "_")}`;
+  const font = new FontFace(family, `url("${API}/projects/${state.projectId}/fonts/${encodeURIComponent(data.filename)}")`);
+  document.fonts.add(await font.load());
+  certificateFonts[data.filename] = { family, custom: true };
   const opt = document.createElement("option");
   opt.value = data.filename;
   opt.textContent = `${data.filename} (custom)`;
@@ -297,11 +327,11 @@ onAction("uploadFontBtn", async () => {
 
 onAction("saveFieldsBtn", async () => {
   if (!state.canvas) return;
-  const fields = state.canvas.getObjects("textbox").map((obj) => ({
+  const fields = state.canvas.getObjects().filter((obj) => obj.data?.name).map((obj) => ({
     name: obj.data.name,
     x: Math.round(obj.left / state.bgScale),
     y: Math.round(obj.top / state.bgScale),
-    font_size: Math.round(obj.fontSize / state.bgScale),
+    font_size: Math.round(obj.fontSize * obj.scaleY / state.bgScale),
     color: obj.fill,
     font: obj.data.font,
     bold: obj.data.bold,

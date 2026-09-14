@@ -6,10 +6,25 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 WINDOWS_FONTS_DIR = Path(r"C:\Windows\Fonts")
+FONT_VARIANTS = (
+    ("arial.ttf", "arialbd.ttf", "ariali.ttf", "arialbi.ttf"),
+    ("times.ttf", "timesbd.ttf", "timesi.ttf", "timesbi.ttf"),
+    ("calibri.ttf", "calibrib.ttf", "calibrii.ttf", "calibriz.ttf"),
+)
+
+
+def styled_font(font_name: str, bold: bool, italic: bool) -> str:
+    for variants in FONT_VARIANTS:
+        if font_name.lower() in variants:
+            current = variants.index(font_name.lower())
+            return variants[current | int(bold) | (int(italic) << 1)]
+    return font_name
 
 
 def resolve_font(font_name: str, size: int, fonts_dir: Path) -> ImageFont.FreeTypeFont:
     """Looks for a custom uploaded font first, then falls back to Windows system fonts."""
+    if any(character in font_name for character in "/\\:"):
+        raise ValueError("Font must be a filename")
     candidates = [fonts_dir / font_name, WINDOWS_FONTS_DIR / font_name]
     for path in candidates:
         if path.exists():
@@ -33,10 +48,12 @@ def render_certificate(
     img = Image.open(background_path).convert("RGB")
     draw = ImageDraw.Draw(img)
     for field in fields:
-        text = str(row.get(field["name"], ""))
+        value = row.get(field["name"])
+        text = "" if value is None else str(value)
         if not text:
             continue
-        font = resolve_font(field.get("font", "arial.ttf"), int(field.get("font_size", 40)), fonts_dir)
+        font_name = styled_font(field.get("font", "arial.ttf"), field.get("bold", False), field.get("italic", False))
+        font = resolve_font(font_name, int(field.get("font_size", 40)), fonts_dir)
         draw.text(
             (field["x"], field["y"]),
             text,
