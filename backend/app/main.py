@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routes_email import router as email_router
@@ -13,6 +13,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 app = FastAPI(title="Certify - Certificate & Mail Merge Tool")
+
+
+@app.exception_handler(FileNotFoundError)
+async def missing_file_handler(request, exc):
+    return JSONResponse(status_code=404, content={"detail": "Project or file not found"})
+
+
+@app.exception_handler(ValueError)
+async def invalid_input_handler(request, exc):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
 
 app.include_router(projects_router)
 app.include_router(email_router)

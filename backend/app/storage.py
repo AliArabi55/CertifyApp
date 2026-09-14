@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from pathlib import Path
 
@@ -10,10 +11,20 @@ DATA_DIR.mkdir(exist_ok=True)
 
 
 def _project_dir(project_id: str) -> Path:
-    return DATA_DIR / project_id
+    if not re.fullmatch(r"[a-f0-9]{10}", project_id):
+        raise ValueError("Invalid project ID")
+    path = (DATA_DIR / project_id).resolve()
+    if path.parent != DATA_DIR.resolve():
+        raise ValueError("Invalid project path")
+    return path
 
 
 def create_project(name: str, mode: str = "certificates") -> dict:
+    name = name.strip()
+    if not name or len(name) > 200:
+        raise ValueError("Project name must contain 1 to 200 characters")
+    if mode not in {"certificates", "emails_only"}:
+        raise ValueError("Invalid project mode")
     project_id = uuid.uuid4().hex[:10]
     pdir = _project_dir(project_id)
     pdir.mkdir(parents=True, exist_ok=True)
@@ -57,4 +68,12 @@ def list_projects() -> list[dict]:
 
 
 def project_path(project_id: str, *parts: str) -> Path:
-    return _project_dir(project_id).joinpath(*parts)
+    path = _project_dir(project_id)
+    for part in parts:
+        if not isinstance(part, str) or not part or part in {".", ".."} or re.search(r'[\\/:*?"<>|\x00-\x1f]', part):
+            raise ValueError("Invalid filename")
+        child = (path / part).resolve()
+        if child.parent != path:
+            raise ValueError("Invalid file path")
+        path = child
+    return path

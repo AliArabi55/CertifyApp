@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+from html import escape
+from html.parser import HTMLParser
 
 VAR_PATTERN = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
 CID_SRC_PATTERN = re.compile(r"cid:([a-zA-Z0-9_]+)")
@@ -17,7 +19,34 @@ def detect_variables(text: str) -> list[str]:
 
 
 def render_template(text: str, row: dict) -> str:
-    return VAR_PATTERN.sub(lambda m: str(row.get(m.group(1), "")), text or "")
+    return VAR_PATTERN.sub(lambda m: "" if row.get(m.group(1)) is None else str(row[m.group(1)]), text or "")
+
+
+def render_html(text: str, row: dict) -> str:
+    return render_template(text, {key: escape(str(value), quote=True) if value is not None else "" for key, value in row.items()})
+
+
+class _PlainTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"br", "p", "div", "li", "tr", "h1", "h2", "h3"}:
+            self.parts.append("\n")
+        if tag == "a":
+            for name, value in attrs:
+                if name == "href" and value:
+                    self.parts.append(f" ({value}) ")
+
+
+def plain_text(html: str) -> str:
+    parser = _PlainTextParser()
+    parser.feed(html)
+    return "".join(parser.parts).strip()
 
 
 def safe_cid(name: str) -> str:

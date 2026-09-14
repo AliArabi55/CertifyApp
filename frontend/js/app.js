@@ -12,9 +12,140 @@ function $(id) {
   return document.getElementById(id);
 }
 
+async function apiFetch(url, options) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const detail = Array.isArray(data.detail)
+      ? data.detail.map((item) => item.msg).join("; ")
+      : data.detail;
+    throw new Error(detail || `Request failed (${response.status})`);
+  }
+  return response;
+}
+
+function onAction(target, action) {
+  const button = typeof target === "string" ? $(target) : target;
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    $("appStatus").textContent = "";
+    try {
+      await action();
+    } catch (error) {
+      $("appStatus").textContent = error.message || "The request failed. Please try again.";
+      if (button.id === "sendAllBtn") $("sendAllStatus").textContent = "Sending stopped. Check the error above before retrying.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+let emailEditor = null;
+let editorMode = "html";
+let editorSelection = { index: 0, length: 0 };
+let draftDirty = false;
+
+function markDraftDirty() {
+  draftDirty = true;
+  $("editorStatus").textContent = "Unsaved changes";
+}
+
+["subjectInput", "htmlTextarea"].forEach((id) => $(id).addEventListener("input", markDraftDirty));
+window.addEventListener("beforeunload", (event) => {
+  if (draftDirty && state.projectId) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
+
+function previewImageSources(html) {
+  return html.replace(/src=(["'])cid:([a-zA-Z0-9_-]+)\1/g, (_match, quote, cid) =>
+    `src=${quote}${API}/projects/${state.projectId}/email-images/by-cid/${cid}${quote}`);
+}
+
+function getDraftHtml() {
+  if (editorMode === "html") return $("htmlTextarea").value;
+  if (emailEditor.getLength() === 1 && !emailEditor.root.querySelector("img")) return "";
+  const documentBody = new DOMParser().parseFromString(emailEditor.getSemanticHTML(), "text/html");
+  documentBody.querySelectorAll("img").forEach((image) => {
+    const prefix = `${API}/projects/${state.projectId}/email-images/by-cid/`;
+    const source = image.getAttribute("src") || "";
+    if (source.startsWith(prefix)) image.setAttribute("src", `cid:${source.slice(prefix.length)}`);
+    image.style.maxWidth = "100%";
+  });
+  return documentBody.body.innerHTML;
+}
+
+function setEditorMode(mode) {
+  if (mode === editorMode) return;
+  if (mode === "visual") {
+    if (!emailEditor) return;
+    const html = $("htmlTextarea").value;
+    if (html.trim() && !confirm("Switch to Compose? Complex HTML layouts may be simplified. Cancel to keep editing the original HTML.")) return;
+    emailEditor.clipboard.dangerouslyPasteHTML(DOMPurify.sanitize(previewImageSources(html)));
+  } else {
+    $("htmlTextarea").value = getDraftHtml();
+  }
+  editorMode = mode;
+  $("visualComposer").hidden = mode !== "visual";
+  $("htmlTextarea").hidden = mode !== "html";
+  $("visualModeBtn").setAttribute("aria-pressed", String(mode === "visual"));
+  $("htmlModeBtn").setAttribute("aria-pressed", String(mode === "html"));
+}
+
+if (window.Quill && window.DOMPurify) {
+  ["align", "direction", "font", "size"].forEach((format) => {
+    Quill.register(Quill.import(`attributors/style/${format}`), true);
+  });
+  emailEditor = new Quill("#emailEditor", {
+    theme: "snow",
+    modules: { toolbar: [
+      [{ font: [] }, { size: ["10px", false, "18px", "32px"] }],
+      ["bold", "italic", "underline", "strike"],
+      [{ color: [] }, { background: [] }],
+      [{ list: "ordered" }, { list: "bullet" }],
+      [{ align: [] }, { direction: "rtl" }],
+      ["link", "clean"],
+    ] },
+  });
+  emailEditor.root.setAttribute("aria-label", "Email message");
+  emailEditor.on("text-change", markDraftDirty);
+  emailEditor.on("selection-change", (range) => { if (range) editorSelection = range; });
+  document.querySelectorAll(".ql-toolbar button").forEach((button) => {
+    const format = [...button.classList].find((name) => name.startsWith("ql-"))?.slice(3);
+    const label = `${format || "Format"}${button.value ? ` ${button.value}` : ""}`;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+  });
+  setEditorMode("visual");
+} else {
+  $("visualComposer").hidden = true;
+  $("htmlTextarea").hidden = false;
+  $("visualModeBtn").disabled = true;
+  $("visualModeBtn").setAttribute("aria-pressed", "false");
+  $("htmlModeBtn").setAttribute("aria-pressed", "true");
+  $("editorStatus").textContent = "Compose could not load. HTML editing is still available.";
+}
+$("visualModeBtn").addEventListener("click", () => setEditorMode("visual"));
+$("htmlModeBtn").addEventListener("click", () => setEditorMode("html"));
+
+function insertEmailContent(html) {
+  if (editorMode === "html") {
+    insertAtCursor($("htmlTextarea"), html);
+    markDraftDirty();
+    return;
+  }
+  const index = Math.min(editorSelection.index, emailEditor.getLength() - 1);
+  emailEditor.clipboard.dangerouslyPasteHTML(index, DOMPurify.sanitize(previewImageSources(html)), "user");
+  emailEditor.focus();
+}
+
 // ---------- Step navigation ----------
 document.querySelectorAll(".steps button").forEach((btn) => {
-  btn.addEventListener("click", () => showStep(btn.dataset.step));
+  btn.addEventListener("click", () => {
+    if (!state.projectId) return alert("Create a project first");
+    showStep(btn.dataset.step);
+  });
 });
 
 function showStep(n) {
@@ -26,14 +157,14 @@ function showStep(n) {
 
 // ---------- Step 0: choose mode & create project ----------
 document.querySelectorAll(".mode-card").forEach((btn) => {
-  btn.addEventListener("click", async () => {
+  onAction(btn, async () => {
     const name = $("projectNameInput").value.trim();
     if (!name) return alert("Enter a project name first");
     const mode = btn.dataset.mode;
     const form = new FormData();
     form.append("name", name);
     form.append("mode", mode);
-    const res = await fetch(`${API}/projects`, { method: "POST", body: form });
+    const res = await apiFetch(`${API}/projects`, { method: "POST", body: form });
     const project = await res.json();
     state.projectId = project.id;
     state.mode = mode;
@@ -55,13 +186,13 @@ function applyMode(mode) {
 }
 
 // ---------- Step 1: Designer ----------
-$("uploadBgBtn").addEventListener("click", async () => {
+onAction("uploadBgBtn", async () => {
   if (!state.projectId) return alert("Create a project first");
   const file = $("bgFileInput").files[0];
   if (!file) return alert("Choose an image file");
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API}/projects/${state.projectId}/background`, { method: "POST", body: form });
+  const res = await apiFetch(`${API}/projects/${state.projectId}/background`, { method: "POST", body: form });
   const project = await res.json();
   loadCanvasBackground(`${API}/projects/${state.projectId}/asset/${project.background}?t=${Date.now()}`);
   $("designerRow").style.display = "flex";
@@ -151,12 +282,12 @@ $("deleteFieldBtn").addEventListener("click", () => {
   $("fieldProps").style.display = "none";
 });
 
-$("uploadFontBtn").addEventListener("click", async () => {
+onAction("uploadFontBtn", async () => {
   const file = $("fontFileInput").files[0];
   if (!file || !state.projectId) return alert("Create a project and choose a .ttf file first");
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API}/projects/${state.projectId}/fonts`, { method: "POST", body: form });
+  const res = await apiFetch(`${API}/projects/${state.projectId}/fonts`, { method: "POST", body: form });
   const data = await res.json();
   const opt = document.createElement("option");
   opt.value = data.filename;
@@ -164,7 +295,7 @@ $("uploadFontBtn").addEventListener("click", async () => {
   $("fontFamilySelect").appendChild(opt);
 });
 
-$("saveFieldsBtn").addEventListener("click", async () => {
+onAction("saveFieldsBtn", async () => {
   if (!state.canvas) return;
   const fields = state.canvas.getObjects("textbox").map((obj) => ({
     name: obj.data.name,
@@ -177,7 +308,7 @@ $("saveFieldsBtn").addEventListener("click", async () => {
     italic: obj.data.italic,
     anchor: "mm",
   }));
-  const res = await fetch(`${API}/projects/${state.projectId}/fields`, {
+  const res = await apiFetch(`${API}/projects/${state.projectId}/fields`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(fields),
@@ -192,12 +323,12 @@ $("downloadTemplateBtn").addEventListener("click", () => {
   window.location.href = `${API}/projects/${state.projectId}/template.xlsx`;
 });
 
-$("generateBtn").addEventListener("click", async () => {
+onAction("generateBtn", async () => {
   const file = $("excelFileInput").files[0];
   if (!file || !state.projectId) return alert("Choose the filled Excel file");
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API}/projects/${state.projectId}/generate`, { method: "POST", body: form });
+  const res = await apiFetch(`${API}/projects/${state.projectId}/generate`, { method: "POST", body: form });
   const data = await res.json();
   state.generatedRows = data.rows;
   renderGeneratedTable(data.rows);
@@ -208,11 +339,24 @@ function renderGeneratedTable(rows) {
   const tbody = $("generatedTableBody");
   tbody.innerHTML = "";
   rows.forEach((row) => {
-    const certCell = row._certificate_file
-      ? `<a href="${API}/projects/${state.projectId}/generated/${row._certificate_file}" target="_blank">Download</a>`
-      : "—";
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${row.Name || ""}</td><td>${row.Email || ""}</td><td>${certCell}</td>`;
+    [row.Name || "", row.Email || ""].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      tr.appendChild(cell);
+    });
+    const certificate = document.createElement("td");
+    if (row._certificate_file) {
+      const link = document.createElement("a");
+      link.href = `${API}/projects/${state.projectId}/generated/${encodeURIComponent(row._certificate_file)}`;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "Download";
+      certificate.appendChild(link);
+    } else {
+      certificate.textContent = "-";
+    }
+    tr.appendChild(certificate);
     tbody.appendChild(tr);
   });
   $("generatedCount").textContent = `${rows.length} recipient(s) loaded.`;
@@ -266,26 +410,26 @@ $("generatePromptBtn").addEventListener("click", () => {
   $("copyPromptBtn").style.display = "inline-block";
 });
 
-$("copyPromptBtn").addEventListener("click", async () => {
+onAction("copyPromptBtn", async () => {
   await navigator.clipboard.writeText($("aiPromptOutput").value);
   alert("Prompt copied! Paste it into ChatGPT or Gemini, then paste the HTML it gives back into the box below.");
 });
 
-$("uploadEmailImageBtn").addEventListener("click", async () => {
+onAction("uploadEmailImageBtn", async () => {
   if (!state.projectId) return alert("Create a project first");
   const file = $("emailImageInput").files[0];
   if (!file) return alert("Choose an image");
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API}/projects/${state.projectId}/email-images`, { method: "POST", body: form });
+  const res = await apiFetch(`${API}/projects/${state.projectId}/email-images`, { method: "POST", body: form });
   const data = await res.json();
   const tag = `<img src="cid:${data.cid}" alt="" style="max-width:100%;display:block;margin:12px 0;" />`;
-  insertAtCursor($("htmlTextarea"), tag);
+  insertEmailContent(tag);
 });
 
 $("insertLinkedInBtn").addEventListener("click", () => {
   const snippet = `\n<table role="presentation" cellpadding="0" cellspacing="0"><tr><td align="center" style="background-color:#0a66c2;border-radius:6px;">\n<a href="{{LinkedIn_Share_Link}}" target="_blank" style="display:inline-block;padding:12px 24px;color:#ffffff;font-weight:bold;font-size:14px;text-decoration:none;">\ud83d\udc49 Share on LinkedIn</a>\n</td></tr></table>\n`;
-  insertAtCursor($("htmlTextarea"), snippet);
+  insertEmailContent(snippet);
   alert(
     "Inserted. This links to a {{LinkedIn_Share_Link}} column you provide in your Excel sheet " +
       "(pre-fills a LinkedIn post with your caption). Note: LinkedIn does not support auto-attaching " +
@@ -293,10 +437,13 @@ $("insertLinkedInBtn").addEventListener("click", () => {
   );
 });
 
-$("saveDraftBtn").addEventListener("click", async () => {
-  if (!state.projectId) return alert("Create a project first");
-  const draft = { subject: $("subjectInput").value, html: $("htmlTextarea").value };
-  const res = await fetch(`${API}/projects/${state.projectId}/email-draft`, {
+async function saveCurrentDraft(forSending = false) {
+  if (!state.projectId) throw new Error("Create a project first");
+  const draft = { subject: $("subjectInput").value, html: getDraftHtml() };
+  if (forSending && (!draft.subject.trim() || !draft.html.trim())) {
+    throw new Error("Enter a subject and message before sending");
+  }
+  const res = await apiFetch(`${API}/projects/${state.projectId}/email-draft`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(draft),
@@ -305,13 +452,18 @@ $("saveDraftBtn").addEventListener("click", async () => {
   $("detectedVariables").textContent = data.variables.length
     ? `Detected variables: ${data.variables.join(", ")}`
     : "No {{variables}} detected yet.";
-});
+  draftDirty = draft.subject !== $("subjectInput").value || draft.html !== getDraftHtml();
+  $("editorStatus").textContent = draftDirty ? "Unsaved changes" : "Saved";
+}
 
-$("previewEmailBtn").addEventListener("click", async () => {
+onAction("saveDraftBtn", () => saveCurrentDraft());
+
+onAction("previewEmailBtn", async () => {
   const idx = $("previewRowSelect").value;
   const row = state.generatedRows[idx];
   if (!row) return alert("Load recipients first (Step 2)");
-  const res = await fetch(`${API}/projects/${state.projectId}/email-preview`, {
+  await saveCurrentDraft();
+  const res = await apiFetch(`${API}/projects/${state.projectId}/email-preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(row),
@@ -322,13 +474,13 @@ $("previewEmailBtn").addEventListener("click", async () => {
 });
 
 // ---------- Step 4: Gmail connect & send ----------
-$("connectGmailBtn").addEventListener("click", async () => {
+onAction("connectGmailBtn", async () => {
   const email = $("gmailAddressInput").value.trim();
   const app_password = $("gmailAppPasswordInput").value.trim();
   if (!email || !app_password) return alert("Enter your Gmail address and App Password");
   $("gmailStatus").textContent = "Connecting…";
   try {
-    const res = await fetch(`${API}/gmail/connect`, {
+    const res = await apiFetch(`${API}/gmail/connect`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, app_password }),
@@ -345,25 +497,26 @@ $("connectGmailBtn").addEventListener("click", async () => {
   }
 });
 
-$("disconnectGmailBtn").addEventListener("click", async () => {
+onAction("disconnectGmailBtn", async () => {
   if (!confirm("Forget the saved Gmail credentials on this machine?")) return;
-  await fetch(`${API}/gmail/disconnect`, { method: "POST" });
-  refreshGmailStatus();
+  await apiFetch(`${API}/gmail/disconnect`, { method: "POST" });
+  await refreshGmailStatus();
 });
 
 async function refreshGmailStatus() {
-  const res = await fetch(`${API}/gmail/status`);
+  const res = await apiFetch(`${API}/gmail/status`);
   const data = await res.json();
   $("gmailStatus").textContent = data.connected ? `Connected as ${data.email}` : "Not connected";
 }
-refreshGmailStatus();
+refreshGmailStatus().catch(() => { $("gmailStatus").textContent = "Could not check Gmail connection"; });
 
-$("sendTestBtn").addEventListener("click", async () => {
+onAction("sendTestBtn", async () => {
   const idx = $("testRowSelect").value;
   const row = state.generatedRows[idx];
   const to = $("testToInput").value.trim();
   if (!row || !to) return alert("Pick a recipient row and enter a test address");
-  const res = await fetch(`${API}/projects/${state.projectId}/send-test`, {
+  await saveCurrentDraft(true);
+  const res = await apiFetch(`${API}/projects/${state.projectId}/send-test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, row }),
@@ -372,11 +525,12 @@ $("sendTestBtn").addEventListener("click", async () => {
   alert(res.ok ? "Test email sent!" : `Failed: ${data.detail || "unknown error"}`);
 });
 
-$("sendAllBtn").addEventListener("click", async () => {
+onAction("sendAllBtn", async () => {
   if (!state.generatedRows.length) return alert("Load recipients first (Step 2)");
   if (!confirm(`Send to all ${state.generatedRows.length} recipients now?`)) return;
+  await saveCurrentDraft(true);
   $("sendAllStatus").textContent = "Sending… this can take a while.";
-  const res = await fetch(`${API}/projects/${state.projectId}/send-all`, {
+  const res = await apiFetch(`${API}/projects/${state.projectId}/send-all`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rows: state.generatedRows, force: false }),
@@ -391,7 +545,11 @@ function renderSendResults(results) {
   tbody.innerHTML = "";
   (results || []).forEach((r) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.email}</td><td>${r.status}</td>`;
+    [r.email, r.status].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      tr.appendChild(cell);
+    });
     tbody.appendChild(tr);
   });
 }

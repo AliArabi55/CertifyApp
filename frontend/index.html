@@ -4,8 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Certify — Certificates &amp; Mail Merge</title>
+<link rel="stylesheet" href="/static/vendor/quill.snow.css" />
 <link rel="stylesheet" href="/static/css/style.css" />
-<script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+<script src="/static/vendor/fabric.min.js"></script>
+<script src="/static/vendor/quill.js"></script>
+<script src="/static/vendor/purify.min.js"></script>
 </head>
 <body>
 
@@ -22,6 +25,7 @@
 </nav>
 
 <main>
+  <p id="appStatus" class="status error-status" role="alert"></p>
 
   <!-- Step 0: choose what you want to do -->
   <section id="step-0" class="step active">
@@ -127,7 +131,15 @@
       <button id="uploadEmailImageBtn">Upload &amp; insert image</button>
       <button id="insertLinkedInBtn">Insert LinkedIn share button</button>
     </div>
-    <textarea id="htmlTextarea" rows="12" placeholder="Write your HTML email body here..."></textarea>
+    <div class="composer-modes" role="group" aria-label="Email editor mode">
+      <button id="visualModeBtn" type="button" aria-pressed="true">Compose</button>
+      <button id="htmlModeBtn" type="button" aria-pressed="false">HTML</button>
+    </div>
+    <div id="visualComposer">
+      <div id="emailEditor" aria-label="Email message"></div>
+    </div>
+    <textarea id="htmlTextarea" rows="12" aria-label="Email HTML source" placeholder="Write your HTML email body here..." hidden></textarea>
+    <p id="editorStatus" class="status" role="status"></p>
     <div class="row">
       <button id="saveDraftBtn" class="primary">Save draft</button>
     </div>
@@ -138,7 +150,7 @@
       <button id="previewEmailBtn">Preview for this recipient</button>
     </div>
     <p><strong id="previewSubject"></strong></p>
-    <iframe id="previewFrame" class="preview-frame"></iframe>
+    <iframe id="previewFrame" class="preview-frame" title="Email preview" sandbox="" referrerpolicy="no-referrer"></iframe>
   </section>
 
   <!-- Step 4: Connect Gmail + send -->

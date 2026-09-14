@@ -6,12 +6,14 @@ import csv
 import smtplib
 import time
 from pathlib import Path
+from threading import Lock
 
 from fastapi import APIRouter, Body, HTTPException
 
 from . import email_utils, gmail_smtp, storage
 
 router = APIRouter(tags=["gmail"])
+_send_locks: dict[str, Lock] = {}
 
 
 def _collect_inline_images(project_id: str) -> dict[str, Path]:
@@ -52,7 +54,7 @@ async def send_test(project_id: str, to: str = Body(embed=True), row: dict = Bod
     project = storage.load_project(project_id)
     draft = project.get("email_draft", {})
     subject = "[TEST] " + email_utils.render_template(draft.get("subject", ""), row)
-    html = email_utils.render_template(draft.get("html", ""), row)
+    html = email_utils.render_html(draft.get("html", ""), row)
     cert_file = row.get("_certificate_file")
     attachment = storage.project_path(project_id, "generated", cert_file) if cert_file else None
     try:
@@ -72,6 +74,17 @@ async def send_test(project_id: str, to: str = Body(embed=True), row: dict = Bod
 
 @router.post("/api/projects/{project_id}/send-all")
 async def send_all(project_id: str, rows: list[dict] = Body(embed=True), force: bool = Body(False, embed=True)):
+    storage.load_project(project_id)
+    lock = _send_locks.setdefault(project_id, Lock())
+    if not lock.acquire(blocking=False):
+        raise HTTPException(409, "A send operation is already running for this project")
+    try:
+        return await _send_all(project_id, rows, force)
+    finally:
+        lock.release()
+
+
+async def _send_all(project_id: str, rows: list[dict], force: bool):
     project = storage.load_project(project_id)
     draft = project.get("email_draft", {})
     log_path = storage.project_path(project_id, "send_log.csv")
@@ -82,16 +95,20 @@ async def send_all(project_id: str, rows: list[dict] = Body(embed=True), force: 
         with open(log_path, newline="", encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 if r.get("status") == "sent":
-                    already_sent.add(r["email"])
+                    already_sent.add(r["email"].strip().casefold())
 
     sent_count = 0
     results = []
     for row in rows:
-        email = row.get("Email")
-        if not email or email in already_sent:
+        email = str(row.get("Email") or "").strip()
+        if not email:
+            results.append({"email": "", "status": "skipped: missing email"})
+            continue
+        if email.casefold() in already_sent:
+            results.append({"email": email, "status": "skipped: already sent"})
             continue
         subject = email_utils.render_template(draft.get("subject", ""), row)
-        html = email_utils.render_template(draft.get("html", ""), row)
+        html = email_utils.render_html(draft.get("html", ""), row)
         cert_file = row.get("_certificate_file")
         attachment = storage.project_path(project_id, "generated", cert_file) if cert_file else None
         try:
@@ -106,6 +123,7 @@ async def send_all(project_id: str, rows: list[dict] = Body(embed=True), force: 
             )
             status = "sent"
             sent_count += 1
+            already_sent.add(email.casefold())
         except Exception as e:
             status = f"error: {e}"
         results.append({"email": email, "status": status})

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import shutil
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
@@ -66,7 +67,7 @@ def download_template(project_id: str):
     extra = email_utils.detect_variables(draft.get("html", "")) + email_utils.detect_variables(
         draft.get("subject", "")
     )
-    columns = ["Email"] + list(dict.fromkeys(field_names + extra))
+    columns = list(dict.fromkeys(["Email", "Name"] + field_names + extra))
     out_path = storage.project_path(project_id, "template.xlsx")
     excel_utils.generate_template(columns, out_path)
     return FileResponse(out_path, filename=f"{project['name']}_template.xlsx")
@@ -105,12 +106,13 @@ async def generate(project_id: str, file: UploadFile = File(...)):
     gen_dir = storage.project_path(project_id, "generated")
 
     results = []
-    for row in rows:
+    batch_id = uuid.uuid4().hex[:10]
+    for index, row in enumerate(rows, start=1):
         email = row.get("Email")
         if not email:
             continue
         safe_name = "".join(c if c.isalnum() else "_" for c in str(row.get("Name", email)))
-        out_path = gen_dir / f"Certificate_{safe_name}.pdf"
+        out_path = gen_dir / f"Certificate_{safe_name[:80]}_{batch_id}_{index}.pdf"
         cert_render.render_certificate(bg_path, project["fields"], row, fonts_dir, out_path)
         row["_certificate_file"] = out_path.name
         results.append(row)
