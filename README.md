@@ -1,11 +1,64 @@
-# Certify — Certificate & Mail-Merge Web App
+# Certify
+
+تصميم شهادات وإرسال رسائل مخصصة من مكان واحد.
+
+تطبيق محلي للأندية والفرق ومنظمي الفعاليات: صمّم شهادتك، ارفع بيانات المشاركين من Excel، ثم أرسل لكل شخص رسالته وشهادته عبر Gmail. ويمكنك إرسال الرسائل فقط دون شهادات.
+
+![الصفحة الرئيسية واختيار نوع المشروع](docs/images/home.png)
+
+## المميزات
+
+| الميزة | ماذا تقدم لك؟ |
+| --- | --- |
+| مصمم الشهادات | خلفية من اختيارك، حقول قابلة للسحب، وتخصيص الخط والحجم واللون. |
+| توليد جماعي | شهادة PDF منفصلة لكل مشارك من ملف Excel. |
+| رسائل شخصية | استخدام متغيرات مثل `{{Name}}` مع معاينة الرسالة لكل مستلم. |
+| محتوى غني | صور داخل الرسالة وزر مشاركة LinkedIn ومساعد لبناء طلب كتابة لـ ChatGPT أو Gemini. |
+| إرسال عبر Gmail | ربط حسابك بكلمة مرور تطبيق، دون إعداد Google Cloud أو OAuth. |
+| تجربة قبل الإرسال | إرسال اختباري أولًا، وسجل يتجاوز المستلمين المسجلين كمرسَل إليهم عند إعادة الإرسال. |
+
+## التشغيل السريع
+
+تحتاج إلى **Python 3.10 أو أحدث**. افتح PowerShell داخل مجلد المشروع وشغّل الأوامر التالية؛ إعداد البيئة وتثبيت المتطلبات مطلوبان في المرة الأولى فقط:
+
+```powershell
+python -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8080
+```
+
+افتح **[http://localhost:8080](http://localhost:8080)**. اترك نافذة التشغيل مفتوحة، واستخدم `Ctrl+C` لإيقاف الخادم.
+
+في VS Code يمكنك أيضًا اختيار **Terminal > Run Task > Run Certify (8080)** بعد تثبيت المتطلبات. إذا كان المنفذ مشغولًا، أوقف نسخة التطبيق السابقة أو غيّر `8080` في الأمر إلى منفذ متاح وافتح العنوان الجديد.
+
+## الاستخدام في 5 خطوات
+
+1. **أنشئ مشروعًا:** اكتب اسمه واختر الشهادات والرسائل، أو الرسائل فقط.
+2. **صمّم الشهادة:** ارفع صورة الخلفية، أضف حقولًا مثل `Name`، ثم اضغط **Save fields**. تجاوز هذه الخطوة في وضع الرسائل فقط.
+3. **جهّز الرسالة والبيانات:** اكتب عنوان الرسالة ومحتوى HTML ومتغيراته في **Email** واحفظ المسودة. ارجع إلى **Recipients** لتنزيل قالب Excel، واملأ صفًا لكل شخص مع عمود `Email`، ثم ارفعه لتوليد الشهادات أو تحميل المستلمين. تحديد المتغيرات قبل تنزيل القالب يضمن ظهور أعمدتها.
+4. **راجع المعاينة:** افتح **Email** واختر مستلمًا ثم **Preview for this recipient** للتأكد من استبدال المتغيرات.
+5. **اختبر ثم أرسل:** اربط Gmail في **Send**، أرسل رسالة اختبار لنفسك، وراجعها قبل **Send to all recipients**.
+
+![محرر الرسائل ومساعد كتابة الطلبات](docs/images/email.png)
+
+## ربط Gmail وحماية بياناتك
+
+- فعّل [التحقق بخطوتين](https://myaccount.google.com/security)، ثم أنشئ [كلمة مرور تطبيق](https://myaccount.google.com/apppasswords) والصقها داخل التطبيق مع عنوان Gmail. لا تستخدم كلمة مرور حسابك العادية. قد تمنع سياسات بعض الحسابات إنشاء كلمات مرور التطبيقات.
+- تُحفظ بيانات المشاريع والشهادات محليًا داخل `backend/projects/`. وتُحفظ بيانات Gmail بنص صريح في `config/.env`؛ لا تشارك هذا الملف أو تضفه إلى Git. استخدم **Forget credentials** لحذفها محليًا.
+- يتصل التطبيق بخدمات خارجية لإرسال البريد وتحميل مكتبة الواجهة. وإذا استخدمت مساعد ChatGPT أو Gemini، فلا تنسخ إليه بيانات المستلمين أو كلمات المرور.
+- تخضع الرسائل لحدود Gmail وسياسات الحساب. زر LinkedIn لا يرفع الشهادة تلقائيًا؛ يرفقها المستلم بنفسه.
+
+<details>
+<summary>English documentation and additional details</summary>
+
+## Certificate & Mail-Merge Web App
 
 A local, self-hosted, **plug & play** web app to:
 1. (Optional) Design a certificate (drag-and-drop text fields onto your own background image),
 2. Bulk-generate certificates from an Excel sheet, and
 3. Send personalized emails (with `{{Variable}}` placeholders) from **your own Gmail account**, with the matching certificate auto-attached.
 
-Runs entirely on your machine — no data leaves your computer except the emails you choose to send, and no cloud hosting, Google Cloud project, or OAuth setup is required.
+Runs locally without cloud hosting, a Google Cloud project, or OAuth setup. Sending email uses Gmail, and the frontend loads a library from a public CDN.
 
 > This repo is generic/reusable for any club or organization (built with GitHub Campus Experts in mind). It ships with no hardcoded branding — everything (the certificate design, the variables, the email copy) is defined by you inside the app.
 
@@ -44,9 +97,9 @@ This app sends email over SMTP using an **App Password** — a 16-character code
 ## Running the app
 ```powershell
 cd backend
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8080
 ```
-Open http://localhost:8000 in your browser.
+Open http://localhost:8080 in your browser. From VS Code, you can also run the **Run Certify (8080)** task after installing dependencies in `venv`.
 
 ## Usage walkthrough
 1. **Choose a mode** — name your project, then pick "Design & send certificates" or "Send emails only".
@@ -62,7 +115,7 @@ Everything for a project lives under `backend/projects/<project_id>/`: the backg
 Gmail enforces daily sending caps: ~500 emails/day for a personal `@gmail.com` account, ~2,000/day for Google Workspace accounts. The app waits a couple of seconds between sends to stay well under rate limits, but very large recipient lists may need to be split across days.
 
 ## Security notes
-- `config/.env` contains your Gmail address and App Password in plain text — never commit or share it (already gitignored). An App Password only grants mail access (not your full Google account), and you can revoke it anytime from https://myaccount.google.com/apppasswords without changing your real password. Use **Forget credentials** in the app to delete it locally.
+- `config/.env` contains your Gmail address and App Password in plain text — never commit or share it (already gitignored). Treat the App Password as a sensitive account credential; you can revoke it anytime from https://myaccount.google.com/apppasswords without changing your real password. Use **Forget credentials** in the app to delete it locally.
 - Treat this like any locally-saved credential: don't run the app on a shared/public machine, and revoke the App Password if the machine is ever compromised.
 
 ## Roadmap / ideas not yet implemented
@@ -71,4 +124,6 @@ Gmail enforces daily sending caps: ~500 emails/day for a personal `@gmail.com` a
 - Multiple certificate templates per project.
 - CSV import alongside Excel.
 - "Re-run this campaign" export/reuse of a saved project for future events.
+
+</details>
 
