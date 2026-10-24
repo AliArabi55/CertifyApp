@@ -6,14 +6,20 @@ const state = {
   bgScale: 1,
   fields: [],
   generatedRows: [],
+  csrfToken: "",
+  resetToken: "",
 };
 
 function $(id) {
   return document.getElementById(id);
 }
 
-async function apiFetch(url, options) {
-  const response = await fetch(url, options);
+async function apiFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (state.csrfToken && !["GET", "HEAD", "OPTIONS"].includes((options.method || "GET").toUpperCase())) {
+    headers.set("X-CSRF-Token", state.csrfToken);
+  }
+  const response = await fetch(url, { ...options, headers, credentials: "same-origin" });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     const detail = Array.isArray(data.detail)
@@ -22,6 +28,135 @@ async function apiFetch(url, options) {
     throw new Error(detail || `Request failed (${response.status})`);
   }
   return response;
+}
+
+function setAuthView(view) {
+  const views = { login: "loginForm", register: "registerForm", forgot: "forgotForm", reset: "resetForm" };
+  Object.entries(views).forEach(([name, id]) => { $(id).hidden = name !== view; });
+  $("authHeading").textContent = view === "register" ? "Create your Certify account"
+    : view === "forgot" ? "Reset your password"
+      : view === "reset" ? "Choose a new password" : "Sign in to Certify";
+}
+
+function showSignedIn(user) {
+  state.csrfToken = user.csrf_token;
+  $("authView").hidden = true;
+  document.querySelector(".steps").hidden = false;
+  document.querySelector("main").hidden = false;
+  $("accountBar").hidden = false;
+  $("accountEmail").textContent = user.email;
+  refreshGmailStatus().catch(() => { $("gmailStatus").textContent = "Could not check Gmail connection"; });
+}
+
+function showAuthError(error) {
+  $("authStatus").textContent = error.message || "The request failed. Please try again.";
+}
+
+$("showRegisterBtn").addEventListener("click", () => setAuthView("register"));
+$("showForgotBtn").addEventListener("click", () => setAuthView("forgot"));
+$("showLoginFromRegisterBtn").addEventListener("click", () => setAuthView("login"));
+$("showLoginFromForgotBtn").addEventListener("click", () => setAuthView("login"));
+
+$("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("authStatus").textContent = "";
+  try {
+    const response = await apiFetch(`${API}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: $("loginEmail").value, password: $("loginPassword").value }),
+    });
+    showSignedIn(await response.json());
+  } catch (error) { showAuthError(error); }
+});
+
+$("registerForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("authStatus").textContent = "";
+  try {
+    const response = await apiFetch(`${API}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: $("registerEmail").value, password: $("registerPassword").value }),
+    });
+    const data = await response.json();
+    $("authStatus").textContent = data.message;
+    $("loginEmail").value = $("registerEmail").value;
+    $("registerPassword").value = "";
+    setAuthView("login");
+  } catch (error) { showAuthError(error); }
+});
+
+$("forgotForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const response = await apiFetch(`${API}/auth/password-reset-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: $("forgotEmail").value }),
+    });
+    $("authStatus").textContent = (await response.json()).message;
+  } catch (error) { showAuthError(error); }
+});
+
+$("resetForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const response = await apiFetch(`${API}/auth/password-reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: state.resetToken, password: $("resetPassword").value }),
+    });
+    const data = await response.json();
+    state.resetToken = "";
+    $("resetPassword").value = "";
+    $("authStatus").textContent = data.message;
+    setAuthView("login");
+  } catch (error) { showAuthError(error); }
+});
+
+$("signOutBtn").addEventListener("click", async () => {
+  try { await apiFetch(`${API}/auth/logout`, { method: "POST" }); } catch (_) {}
+  state.csrfToken = "";
+  state.projectId = null;
+  state.generatedRows = [];
+  $("accountBar").hidden = true;
+  $("authView").hidden = false;
+  document.querySelector(".steps").hidden = true;
+  document.querySelector("main").hidden = true;
+  $("loginPassword").value = "";
+  setAuthView("login");
+});
+
+async function initializeAuthentication() {
+  const params = new URLSearchParams(window.location.search);
+  const verificationToken = params.get("verify");
+  state.resetToken = params.get("reset") || "";
+  if (verificationToken) {
+    try {
+      const response = await apiFetch(`${API}/auth/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: verificationToken }),
+      });
+      $("authStatus").textContent = (await response.json()).message;
+    } catch (error) { showAuthError(error); }
+    history.replaceState(null, "", window.location.pathname);
+  }
+  if (state.resetToken) {
+    setAuthView("reset");
+    history.replaceState(null, "", window.location.pathname);
+    return;
+  }
+  try {
+    const response = await apiFetch(`${API}/auth/me`);
+    showSignedIn(await response.json());
+  } catch (_) {
+    $("authView").hidden = false;
+    document.querySelector(".steps").hidden = true;
+    document.querySelector("main").hidden = true;
+    setAuthView("login");
+  }
 }
 
 function onAction(target, action) {
@@ -539,7 +674,7 @@ async function refreshGmailStatus() {
   const data = await res.json();
   $("gmailStatus").textContent = data.connected ? `Connected as ${data.email}` : "Not connected";
 }
-refreshGmailStatus().catch(() => { $("gmailStatus").textContent = "Could not check Gmail connection"; });
+initializeAuthentication();
 
 onAction("sendTestBtn", async () => {
   const idx = $("testRowSelect").value;

@@ -5,25 +5,26 @@ import uuid
 import io
 import math
 import re
+import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from PIL import Image, ImageFont, ImageOps, UnidentifiedImageError
 
-from . import cert_render, email_utils, excel_utils, storage
+from . import auth_store, cert_render, email_utils, excel_utils, storage
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
 @router.get("")
-def list_projects():
-    return storage.list_projects()
+def list_projects(request: Request):
+    return auth_store.list_projects(request.state.user["id"])
 
 
 @router.post("")
-def create_project(name: str = Form(...), mode: str = Form("certificates")):
-    return storage.create_project(name, mode)
+def create_project(request: Request, name: str = Form(...), mode: str = Form("certificates")):
+    return auth_store.create_project(request.state.user["id"], name, mode)
 
 
 @router.get("/{project_id}")

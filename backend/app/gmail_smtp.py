@@ -60,16 +60,21 @@ def get_connected_email() -> Optional[str]:
 
 def connect(email: str, app_password: str) -> str:
     """Validates the App Password with a real login, then saves it locally."""
+    email, password = verify_credentials(email, app_password)
+    values = _read_env()
+    values.update(GMAIL_ADDRESS=email, GMAIL_APP_PASSWORD=password)
+    _write_env(values)
+    return email
+
+
+def verify_credentials(email: str, app_password: str) -> tuple[str, str]:
     password = app_password.replace(" ", "")
     email = email.strip()
     if not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", email) or not password or any(char in password for char in "\r\n"):
         raise ValueError("Enter a valid email and App Password")
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30, context=ssl.create_default_context()) as smtp:
         smtp.login(email, password)
-    values = _read_env()
-    values.update(GMAIL_ADDRESS=email, GMAIL_APP_PASSWORD=password)
-    _write_env(values)
-    return email
+    return email, password
 
 
 def disconnect() -> None:
@@ -94,10 +99,11 @@ def send_email(
     html_body: str,
     attachment_path: Optional[Path] = None,
     inline_images: Optional[dict] = None,
+    credentials: Optional[tuple[str, str]] = None,
 ) -> None:
-    env = _read_env()
-    sender_email = env.get("GMAIL_ADDRESS")
-    app_password = env.get("GMAIL_APP_PASSWORD")
+    env = _read_env() if credentials is None else {}
+    sender_email = credentials[0] if credentials else env.get("GMAIL_ADDRESS")
+    app_password = credentials[1] if credentials else env.get("GMAIL_APP_PASSWORD")
     if not sender_email or not app_password:
         raise RuntimeError("Gmail is not connected yet. Enter your address and App Password first.")
     to_email = to_email.strip()

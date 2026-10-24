@@ -8,9 +8,10 @@ import time
 from pathlib import Path
 from threading import Lock
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 
-from . import email_utils, gmail_smtp, storage
+from . import auth_store, email_utils, gmail_smtp, storage
+from .auth_security import decrypt_credential, encrypt_credential
 
 router = APIRouter(tags=["gmail"])
 _send_locks: dict[str, Lock] = {}
@@ -24,33 +25,53 @@ def _collect_inline_images(project_id: str) -> dict[str, Path]:
 
 
 @router.post("/api/gmail/connect")
-async def gmail_connect(email: str = Body(embed=True), app_password: str = Body(embed=True)):
+async def gmail_connect(request: Request, email: str = Body(embed=True), app_password: str = Body(embed=True)):
     try:
-        connected_email = await asyncio.to_thread(gmail_smtp.connect, email, app_password)
+        connected_email, normalized_password = await asyncio.to_thread(
+            gmail_smtp.verify_credentials, email, app_password
+        )
+        encrypted_password = encrypt_credential(normalized_password)
+        auth_store.set_gmail_credentials(request.state.user["id"], connected_email, encrypted_password)
     except smtplib.SMTPAuthenticationError:
         raise HTTPException(
             400,
             "Invalid email or App Password. Make sure 2-Step Verification is enabled on this "
             "Google account and you're using a 16-character App Password, not your regular password.",
         )
+    except RuntimeError as exc:
+        raise HTTPException(503, "Secure Gmail credential storage is not configured.") from exc
     except Exception as e:
         raise HTTPException(400, str(e))
     return {"connected": True, "email": connected_email}
 
 
 @router.post("/api/gmail/disconnect")
-def gmail_disconnect():
-    gmail_smtp.disconnect()
+def gmail_disconnect(request: Request):
+    auth_store.clear_gmail_credentials(request.state.user["id"])
     return {"connected": False}
 
 
 @router.get("/api/gmail/status")
-def gmail_status():
-    return {"connected": gmail_smtp.is_connected(), "email": gmail_smtp.get_connected_email()}
+def gmail_status(request: Request):
+    user = auth_store.get_user_by_id(request.state.user["id"])
+    return {
+        "connected": bool(user and user["gmail_email"] and user["gmail_password"]),
+        "email": user["gmail_email"] if user else None,
+    }
+
+
+def _user_credentials(user_id: str) -> tuple[str, str]:
+    user = auth_store.get_user_by_id(user_id)
+    if not user or not user["gmail_email"] or not user["gmail_password"]:
+        raise HTTPException(400, "Connect your Gmail account before sending.")
+    try:
+        return user["gmail_email"], decrypt_credential(user["gmail_password"])
+    except RuntimeError as exc:
+        raise HTTPException(503, "Saved Gmail credentials are unavailable.") from exc
 
 
 @router.post("/api/projects/{project_id}/send-test")
-async def send_test(project_id: str, to: str = Body(embed=True), row: dict = Body(embed=True)):
+async def send_test(request: Request, project_id: str, to: str = Body(embed=True), row: dict = Body(embed=True)):
     project = storage.load_project(project_id)
     draft = project.get("email_draft", {})
     subject = "[TEST] " + email_utils.render_template(draft.get("subject", ""), row)
@@ -66,6 +87,7 @@ async def send_test(project_id: str, to: str = Body(embed=True), row: dict = Bod
             html,
             attachment,
             _collect_inline_images(project_id),
+            _user_credentials(request.state.user["id"]),
         )
     except Exception as e:
         raise HTTPException(400, str(e))
@@ -73,19 +95,20 @@ async def send_test(project_id: str, to: str = Body(embed=True), row: dict = Bod
 
 
 @router.post("/api/projects/{project_id}/send-all")
-async def send_all(project_id: str, rows: list[dict] = Body(embed=True), force: bool = Body(False, embed=True)):
+async def send_all(request: Request, project_id: str, rows: list[dict] = Body(embed=True), force: bool = Body(False, embed=True)):
     storage.load_project(project_id)
     lock = _send_locks.setdefault(project_id, Lock())
     if not lock.acquire(blocking=False):
         raise HTTPException(409, "A send operation is already running for this project")
     try:
-        return await _send_all(project_id, rows, force)
+        return await _send_all(project_id, rows, force, request.state.user["id"])
     finally:
         lock.release()
 
 
-async def _send_all(project_id: str, rows: list[dict], force: bool):
+async def _send_all(project_id: str, rows: list[dict], force: bool, user_id: str):
     project = storage.load_project(project_id)
+    credentials = _user_credentials(user_id)
     draft = project.get("email_draft", {})
     log_path = storage.project_path(project_id, "send_log.csv")
     inline_images = _collect_inline_images(project_id)
@@ -120,6 +143,7 @@ async def _send_all(project_id: str, rows: list[dict], force: bool):
                 html,
                 attachment,
                 inline_images,
+                credentials,
             )
             status = "sent"
             sent_count += 1

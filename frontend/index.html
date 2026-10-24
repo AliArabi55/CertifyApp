@@ -16,16 +16,49 @@
 <header>
   <h1>🎓 Certify</h1>
   <p>Design certificates, bulk-generate them, and send personalized emails from your own Gmail.</p>
+  <div id="accountBar" class="account-bar" hidden>
+    <span id="accountEmail"></span>
+    <button id="signOutBtn" type="button">Sign out</button>
+  </div>
 </header>
 
-<nav class="steps">
+<section id="authView" class="auth-view" aria-labelledby="authHeading">
+  <h2 id="authHeading">Sign in to Certify</h2>
+  <p id="authStatus" class="status" role="status" aria-live="polite"></p>
+  <form id="loginForm" class="auth-form">
+    <label>Email <input id="loginEmail" type="email" autocomplete="email" required /></label>
+    <label>Password <input id="loginPassword" type="password" autocomplete="current-password" required /></label>
+    <div class="row">
+      <button class="primary" type="submit">Sign in</button>
+      <button id="showRegisterBtn" type="button">Create account</button>
+      <button id="showForgotBtn" type="button">Forgot password?</button>
+    </div>
+  </form>
+  <form id="registerForm" class="auth-form" hidden>
+    <label>Email <input id="registerEmail" type="email" autocomplete="email" required /></label>
+    <label>Password <input id="registerPassword" type="password" autocomplete="new-password" minlength="12" required /></label>
+    <button class="primary" type="submit">Create account</button>
+    <button id="showLoginFromRegisterBtn" type="button">Back to sign in</button>
+  </form>
+  <form id="forgotForm" class="auth-form" hidden>
+    <label>Email <input id="forgotEmail" type="email" autocomplete="email" required /></label>
+    <button class="primary" type="submit">Send reset link</button>
+    <button id="showLoginFromForgotBtn" type="button">Back to sign in</button>
+  </form>
+  <form id="resetForm" class="auth-form" hidden>
+    <label>New password <input id="resetPassword" type="password" autocomplete="new-password" minlength="12" required /></label>
+    <button class="primary" type="submit">Set new password</button>
+  </form>
+</section>
+
+<nav class="steps" hidden>
   <button data-step="1">1. Design</button>
   <button data-step="2">2. Recipients</button>
   <button data-step="3">3. Email</button>
   <button data-step="4">4. Send</button>
 </nav>
 
-<main>
+<main hidden>
   <p id="appStatus" class="status error-status" role="alert"></p>
 
   <!-- Step 0: choose what you want to do -->

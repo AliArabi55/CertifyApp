@@ -6,6 +6,7 @@ import hmac
 import os
 import secrets
 import sqlite3
+import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -187,7 +188,7 @@ def create_project(user_id: str, name: str, mode: str) -> dict:
                 (project["id"], user_id),
             )
     except Exception:
-        storage._project_dir(project["id"]).rmdir()
+        shutil.rmtree(storage._project_dir(project["id"]), ignore_errors=True)
         raise
     return project
 

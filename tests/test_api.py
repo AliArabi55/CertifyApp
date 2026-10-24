@@ -1,6 +1,8 @@
 import io
+import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from threading import Lock
@@ -12,7 +14,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from app import storage, routes_gmail, cert_render
+from app import auth_store, auth_security, storage, routes_gmail, cert_render
 from app.main import app
 
 
@@ -23,8 +25,28 @@ class ProjectFlowTests(unittest.TestCase):
         self.storage_patch = patch.object(storage, "DATA_DIR", Path(self.temp.name))
         self.storage_patch.start()
         self.addCleanup(self.storage_patch.stop)
+        self.auth_db_patch = patch.object(auth_store, "DB_PATH", Path(self.temp.name) / "accounts.sqlite3")
+        self.auth_db_patch.start()
+        self.addCleanup(self.auth_db_patch.stop)
+        self.credential_key_patch = patch.dict(
+            os.environ,
+            {"CERTIFY_CREDENTIAL_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="},
+        )
+        self.credential_key_patch.start()
+        self.addCleanup(self.credential_key_patch.stop)
+        auth_store.init_db()
+        now = int(time.time())
+        auth_store.create_user("test-user", "test@example.com", "test-hash", False, now)
+        verify_token = auth_store.create_action_token("test-user", "verify", now + 5000)
+        auth_store.verify_action_token(verify_token, "verify", now)
+        auth_store.set_gmail_credentials(
+            "test-user", "sender@example.com", auth_security.encrypt_credential("fake-app-password")
+        )
         self.client = TestClient(app)
         self.addCleanup(self.client.close)
+        session_token, csrf_token = auth_store.create_session("test-user", now + 5000)
+        self.client.cookies.set("certify_session", session_token)
+        self.client.headers.update({"X-CSRF-Token": csrf_token})
         self.project = self.client.post(
             "/api/projects", data={"name": "Regression test", "mode": "emails_only"}
         ).json()
@@ -98,6 +120,27 @@ class ProjectFlowTests(unittest.TestCase):
     def test_missing_project_returns_404(self):
         response = self.client.put("/api/projects/0000000000/email-draft", json={"subject": "", "html": ""})
         self.assertEqual(response.status_code, 404)
+
+    def test_anonymous_and_other_users_cannot_access_projects(self):
+        anonymous = TestClient(app)
+        self.addCleanup(anonymous.close)
+        self.assertEqual(anonymous.get("/api/projects").status_code, 401)
+
+        auth_store.create_user("other-user", "other@example.com", "test-hash", False, int(time.time()))
+        token = auth_store.create_action_token("other-user", "verify", int(time.time()) + 5000)
+        auth_store.verify_action_token(token, "verify", int(time.time()))
+        other_client = TestClient(app)
+        self.addCleanup(other_client.close)
+        session, csrf = auth_store.create_session("other-user", int(time.time()) + 5000)
+        other_client.cookies.set("certify_session", session)
+        other_client.headers.update({"X-CSRF-Token": csrf})
+
+        self.assertEqual(other_client.get("/api/projects").json(), [])
+        self.assertEqual(other_client.get(self.base).status_code, 404)
+        self.assertEqual(
+            other_client.put(self.base + "/email-draft", json={"subject": "stolen", "html": ""}).status_code,
+            404,
+        )
 
     @patch("app.routes_gmail.gmail_smtp.send_email")
     def test_concurrent_send_is_rejected(self, send):
