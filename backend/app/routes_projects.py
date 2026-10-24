@@ -1,7 +1,6 @@
 """Project CRUD, certificate designer, template generation, and bulk certificate rendering."""
 from __future__ import annotations
 
-import shutil
 import uuid
 import io
 import math
@@ -139,9 +138,11 @@ def preview(project_id: str, row: dict | None = Body(None)):
 def generate(project_id: str, file: UploadFile = File(...)):
     project = storage.load_project(project_id)
     mode = project.get("mode", "certificates")
+    content = file.file.read(10 * 1024 * 1024 + 1)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(400, "Workbooks must be 10 MB or smaller")
     xlsx_path = storage.project_path(project_id, "data.xlsx")
-    with open(xlsx_path, "wb") as out:
-        shutil.copyfileobj(file.file, out)
+    xlsx_path.write_bytes(content)
     rows = excel_utils.read_rows(xlsx_path)
 
     if mode == "emails_only":

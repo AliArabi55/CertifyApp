@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "projects"
-DATA_DIR.mkdir(exist_ok=True)
+DATA_DIR = Path(os.environ.get("CERTIFY_DATA_DIR") or Path(__file__).resolve().parent.parent / "projects")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _project_dir(project_id: str) -> Path:

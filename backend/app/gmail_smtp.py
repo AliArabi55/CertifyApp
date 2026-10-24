@@ -6,6 +6,7 @@ instead of creating a Google Cloud OAuth client.
 """
 from __future__ import annotations
 
+import os
 import smtplib
 import ssl
 import re
@@ -19,8 +20,8 @@ from typing import Optional
 
 from . import email_utils
 
-CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config"
-CONFIG_DIR.mkdir(exist_ok=True)
+CONFIG_DIR = Path(os.environ.get("CERTIFY_CONFIG_DIR") or Path(__file__).resolve().parent.parent.parent / "config")
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 ENV_PATH = CONFIG_DIR / ".env"
 
 SMTP_HOST = "smtp.gmail.com"
@@ -42,6 +43,10 @@ def _read_env() -> dict:
 def _write_env(values: dict) -> None:
     lines = [f"{k}={v}" for k, v in values.items()]
     ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        ENV_PATH.chmod(0o600)
+    except OSError:
+        pass
 
 
 def is_connected() -> bool:

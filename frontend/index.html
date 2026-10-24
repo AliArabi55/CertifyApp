@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0d1b2e" />
 <title>Certify — Certificates &amp; Mail Merge</title>
 <link rel="stylesheet" href="/static/vendor/quill.snow.css" />
 <link rel="stylesheet" href="/static/css/style.css" />
@@ -97,10 +98,12 @@
       <button id="generateBtn" class="primary">Generate certificates</button>
     </div>
     <p id="generatedCount" class="status"></p>
+    <div class="table-scroll">
     <table class="data-table">
       <thead><tr><th>Name</th><th>Email</th><th>Certificate</th></tr></thead>
       <tbody id="generatedTableBody"></tbody>
     </table>
+    </div>
   </section>
 
   <!-- Step 3: Email draft -->
@@ -177,10 +180,12 @@
       <button id="sendAllBtn" class="danger">Send to all recipients</button>
       <span id="sendAllStatus" class="status"></span>
     </div>
+    <div class="table-scroll">
     <table class="data-table">
       <thead><tr><th>Email</th><th>Status</th></tr></thead>
       <tbody id="sendResultsBody"></tbody>
     </table>
+    </div>
   </section>
 
 </main>

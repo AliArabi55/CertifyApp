@@ -203,8 +203,8 @@ onAction("uploadBgBtn", async () => {
   form.append("file", file);
   const res = await apiFetch(`${API}/projects/${state.projectId}/background`, { method: "POST", body: form });
   const project = await res.json();
-  loadCanvasBackground(`${API}/projects/${state.projectId}/asset/${project.background}?t=${Date.now()}`);
   $("designerRow").style.display = "flex";
+  loadCanvasBackground(`${API}/projects/${state.projectId}/asset/${project.background}?t=${Date.now()}`);
 });
 
 function loadCanvasBackground(url) {
@@ -216,7 +216,8 @@ function loadCanvasBackground(url) {
   fabric.Image.fromURL(
     url,
     (img) => {
-      const maxWidth = 800;
+      const available = document.querySelector(".canvas-wrap").clientWidth || 800;
+      const maxWidth = Math.max(260, Math.min(800, available));
       const scale = Math.min(1, maxWidth / img.width);
       state.bgScale = scale;
       state.canvas.setWidth(img.width * scale);
