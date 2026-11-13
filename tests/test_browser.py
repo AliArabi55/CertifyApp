@@ -15,7 +15,7 @@ from playwright.sync_api import sync_playwright, expect
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from app import gmail_smtp, storage
+from app import auth_store, auth_security, gmail_smtp, storage
 from app.main import app
 
 
@@ -25,10 +25,19 @@ class BrowserFlowTests(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.temp.cleanup)
         cls.root = Path(cls.temp.name)
-        for target, attribute, value in [(storage, "DATA_DIR", cls.root), (gmail_smtp, "ENV_PATH", cls.root / ".env")]:
+        for target, attribute, value in [
+            (storage, "DATA_DIR", cls.root / "projects"),
+            (auth_store, "DB_PATH", cls.root / "accounts.sqlite3"),
+            (gmail_smtp, "ENV_PATH", cls.root / ".env"),
+        ]:
             replacement = patch.object(target, attribute, value)
             replacement.start()
             cls.addClassCleanup(replacement.stop)
+        auth_store.init_db()
+        password_hash = auth_security.hash_password("browser-test-password-123")
+        auth_store.create_user("browser-user", "browser@example.com", password_hash, False, 1)
+        verify_token = auth_store.create_action_token("browser-user", "verify", 10**12)
+        auth_store.verify_action_token(verify_token, "verify", 1)
         smtp_patch = patch("app.gmail_smtp.smtplib.SMTP_SSL")
         cls.smtp = smtp_patch.start()
         cls.addClassCleanup(smtp_patch.stop)
@@ -69,6 +78,10 @@ class BrowserFlowTests(unittest.TestCase):
         self.page.on("pageerror", lambda error: self.errors.append(str(error)))
         self.page.on("dialog", self.handle_dialog)
         self.page.goto(self.url)
+        self.page.locator("#loginEmail").fill("browser@example.com")
+        self.page.locator("#loginPassword").fill("browser-test-password-123")
+        self.page.locator("#loginForm button[type=submit]").click()
+        expect(self.page.locator("#authView")).to_be_hidden()
         self.page.locator("#projectNameInput").fill("Browser test")
         self.page.locator('[data-mode="emails_only"]').click()
         expect(self.page.locator("#step-2")).to_be_visible()

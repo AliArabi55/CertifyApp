@@ -117,7 +117,9 @@ def current_user(request: Request):
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(401, "Sign in to continue.")
-    return {"email": user["email"], "is_admin": bool(user["is_admin"]), "csrf_token": user["csrf_token"]}
+    session_token = request.cookies.get(SESSION_COOKIE, "")
+    csrf_token = auth_store.rotate_session_csrf(session_token)
+    return {"email": user["email"], "is_admin": bool(user["is_admin"]), "csrf_token": csrf_token}
 
 
 @router.post("/logout")

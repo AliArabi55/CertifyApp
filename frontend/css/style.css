@@ -162,6 +162,23 @@ button.danger { background: var(--danger); color: #fff; }
 .ai-prompt-box textarea { width: 100%; margin-top: 8px; }
 .ai-prompt-box label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
 
+.auth-view {
+  width: min(100% - 32px, 480px);
+  margin: 32px auto;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid #274766;
+  border-radius: 8px;
+}
+.auth-view h2 { margin-top: 0; }
+.auth-form { display: grid; gap: 12px; }
+.auth-form label { display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+.auth-form input { width: 100%; min-height: 44px; }
+.auth-form .row { margin-bottom: 0; }
+.account-bar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.account-bar span { color: var(--muted); overflow-wrap: anywhere; }
+.account-bar button { padding: 7px 12px; }
+
 [hidden] { display: none !important; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 .composer-modes { display: flex; gap: 4px; margin: 16px 0 8px; }
@@ -195,6 +212,8 @@ a { color: var(--accent); }
 
 @media (max-width: 640px) {
   header, main { padding-top: 16px; padding-bottom: 16px; }
+  .auth-view { margin: 20px auto; padding: 18px; }
+  .account-bar { justify-content: space-between; align-items: flex-start; }
   nav.steps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 8px; }
   nav.steps button { padding: 10px; border-radius: 8px; background: var(--bg); }
   .mode-cards { flex-direction: column; }

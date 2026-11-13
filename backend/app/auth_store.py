@@ -159,6 +159,16 @@ def csrf_valid(session_user: dict, token: str) -> bool:
     return bool(token) and hmac.compare_digest(session_user["csrf_hash"], _digest(token))
 
 
+def rotate_session_csrf(session_token: str) -> str:
+    csrf_token = secrets.token_urlsafe(32)
+    with _connect() as connection:
+        connection.execute(
+            "UPDATE sessions SET csrf_hash = ? WHERE token_hash = ?",
+            (_digest(csrf_token), _digest(session_token)),
+        )
+    return csrf_token
+
+
 def delete_session(session_token: str) -> None:
     with _connect() as connection:
         connection.execute("DELETE FROM sessions WHERE token_hash = ?", (_digest(session_token),))

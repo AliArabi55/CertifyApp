@@ -37,6 +37,14 @@ PROJECT_PATH = re.compile(r"^/api/projects/([a-f0-9]{10})(?:/|$)")
 @app.middleware("http")
 async def authenticate_and_isolate_projects(request: Request, call_next):
     path = request.url.path
+    if path == "/api/auth/me":
+        session_token = request.cookies.get("certify_session")
+        user = auth_store.get_session_user(session_token, int(time.time())) if session_token else None
+        if not user:
+            return JSONResponse(status_code=401, content={"detail": "Sign in to continue."})
+        request.state.user = user
+        return await call_next(request)
+
     if path in {"/", "/health"} or path.startswith("/static/") or path in PUBLIC_AUTH_PATHS:
         return await call_next(request)
 
