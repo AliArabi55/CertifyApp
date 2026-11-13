@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: certify
+    runtime: python
+    plan: starter
+    branch: render-deploy
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -k uvicorn.workers.UvicornWorker --chdir backend app.main:app --bind 0.0.0.0:$PORT --workers 1 --timeout 600 --access-logfile -
+    healthCheckPath: /health
+    disk:
+      name: certify-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: CERTIFY_DATA_DIR
+        value: /var/data/projects
+      - key: CERTIFY_CONFIG_DIR
+        value: /var/data/config
+      - key: CERTIFY_AUTH_DB
+        value: /var/data/accounts.sqlite3
+      - key: CERTIFY_COOKIE_SECURE
+        value: "1"
+      # Fernet key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - key: CERTIFY_CREDENTIAL_KEY
+        sync: false
+      - key: CERTIFY_OWNER_EMAIL
+        sync: false
+      - key: CERTIFY_PUBLIC_ORIGIN
+        sync: false
+      - key: CERTIFY_MAIL_FROM
+        sync: false
+      - key: CERTIFY_MAIL_APP_PASSWORD
+        sync: false
